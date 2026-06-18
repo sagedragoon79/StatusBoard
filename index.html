@@ -178,6 +178,66 @@
     color: #475569;
   }
   body.focus .hint { display: none; }
+
+  .timer-input[hidden] { display: none; }
+
+  /* ---- Screensaver (idle) ---- */
+  body.screensaver { cursor: none; }
+  body.screensaver .controls,
+  body.screensaver .hint,
+  body.screensaver .clock { opacity: 0; pointer-events: none; }
+  body.screensaver .stage {
+    animation: drift 40s ease-in-out infinite;
+    filter: brightness(0.55);
+    transition: filter 1.2s ease;
+  }
+  @keyframes drift {
+    0%   { transform: translate(-9vw, -7vh); }
+    20%  { transform: translate(8vw, 6vh); }
+    40%  { transform: translate(-6vw, 8vh); }
+    60%  { transform: translate(7vw, -8vh); }
+    80%  { transform: translate(-8vw, 4vh); }
+    100% { transform: translate(-9vw, -7vh); }
+  }
+
+  /* ---- Lock mode ---- */
+  body.locked .controls,
+  body.locked .hint { display: none; }
+  .lockbar {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    padding: 0.7rem 1.1rem;
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    color: #cbd5e1;
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+  .lockbar[hidden] { display: none; }
+  .lockbar input {
+    width: 5.5rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: #f8fafc;
+    text-align: center;
+    font-size: 1.05rem;
+    letter-spacing: 0.3em;
+  }
+  .lockbar.shake { animation: shake 0.4s ease; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(-50%); }
+    25% { transform: translate(calc(-50% - 9px)); }
+    75% { transform: translate(calc(-50% + 9px)); }
+  }
 </style>
 </head>
 <body>
@@ -188,28 +248,42 @@
     <div class="sub" id="sub">Set your status below</div>
     <div class="countdown" id="countdown" hidden></div>
     <div class="return-time" id="returnTime" hidden></div>
-    <div class="hint">Tip: press <b>F</b> for focus mode · <b>Esc</b> to clear timer</div>
+    <div class="hint">Tip: <b>F</b> focus · <b>L</b> lock · <b>Esc</b> clear timer · idle = screensaver</div>
   </main>
 
   <nav class="controls" id="controls">
     <!-- preset buttons injected here -->
     <span class="divider"></span>
-    <label class="timer-input">
-      <input id="minutes" type="number" min="1" max="240" value="30" />
-      min timer
+    <label class="timer-input" id="minutesWrap">
+      <input id="minutes" type="number" min="1" max="600" value="30" /> min
     </label>
+    <label class="timer-input" id="returnWrap" hidden>
+      back at <input id="returnAt" type="time" value="17:30" />
+    </label>
+    <span class="divider"></span>
+    <button class="icon-btn" id="lockBtn" title="Lock display">🔒 Lock</button>
     <button class="icon-btn" id="fullscreenBtn" title="Toggle fullscreen">⛶ Fullscreen</button>
   </nav>
 
+  <div class="lockbar" id="lockbar" hidden>
+    <span>🔒 Display locked</span>
+    <input id="pinInput" type="password" inputmode="numeric" placeholder="PIN" hidden />
+    <button class="icon-btn" id="unlockBtn">Unlock</button>
+  </div>
+
 <script>
+  // Per-status default timer lengths (minutes). "none" = no timer (Available),
+  // "return" = no countdown, just a customizable return time (Done for Day).
+  const DEFAULT_TIMERS = { lunch: 60, break: 15, meeting: 30, brb: 30, focus: 30 };
+
   const PRESETS = [
-    { id: "available", label: "Available",   emoji: "🟢", sub: "At my desk",          color: "#22c55e" },
-    { id: "lunch",     label: "On Lunch",    emoji: "🍔", sub: "Stepped out to eat",  color: "#fbbf24" },
-    { id: "break",     label: "On Break",    emoji: "☕", sub: "Taking a short break", color: "#38bdf8" },
-    { id: "meeting",   label: "In a Meeting",emoji: "📅", sub: "Please do not disturb",color: "#a78bfa" },
-    { id: "brb",       label: "Be Right Back",emoji: "🚶", sub: "Back in a moment",    color: "#fb923c" },
-    { id: "focus",     label: "Focus Time",  emoji: "🎧", sub: "Heads-down, will reply soon", color: "#f472b6" },
-    { id: "eod",       label: "Done for Day",emoji: "🌙", sub: "Out until tomorrow",   color: "#94a3b8" },
+    { id: "available", label: "Available",   emoji: "🟢", sub: "At my desk",          color: "#22c55e", kind: "none" },
+    { id: "lunch",     label: "On Lunch",    emoji: "🍔", sub: "Stepped out to eat",  color: "#fbbf24", kind: "timer" },
+    { id: "break",     label: "On Break",    emoji: "☕", sub: "Taking a short break", color: "#38bdf8", kind: "timer" },
+    { id: "meeting",   label: "In a Meeting",emoji: "📅", sub: "Please do not disturb",color: "#a78bfa", kind: "timer" },
+    { id: "brb",       label: "Be Right Back",emoji: "🚶", sub: "Back in a moment",    color: "#fb923c", kind: "timer" },
+    { id: "focus",     label: "Focus Time",  emoji: "🎧", sub: "Heads-down, will reply soon", color: "#f472b6", kind: "timer" },
+    { id: "eod",       label: "Done for Day",emoji: "🌙", sub: "Out until tomorrow",   color: "#94a3b8", kind: "return" },
   ];
 
   const els = {
@@ -221,10 +295,25 @@
     controls: document.getElementById("controls"),
     clock: document.getElementById("clock"),
     minutes: document.getElementById("minutes"),
+    minutesWrap: document.getElementById("minutesWrap"),
+    returnAt: document.getElementById("returnAt"),
+    returnWrap: document.getElementById("returnWrap"),
+    lockBtn: document.getElementById("lockBtn"),
+    lockbar: document.getElementById("lockbar"),
+    pinInput: document.getElementById("pinInput"),
+    unlockBtn: document.getElementById("unlockBtn"),
   };
 
-  let state = { presetId: "available", endTime: null };
+  let state = {
+    presetId: "available",
+    endTime: null,
+    timers: { ...DEFAULT_TIMERS },
+    eodReturn: "17:30",
+  };
+  let lockPin = null;
   let tick = null;
+
+  const getPreset = id => PRESETS.find(x => x.id === id) || PRESETS[0];
 
   // ---- Build preset buttons ----
   const divider = els.controls.querySelector(".divider");
@@ -238,7 +327,7 @@
   });
 
   function setStatus(id, startTimer) {
-    const p = PRESETS.find(x => x.id === id) || PRESETS[0];
+    const p = getPreset(id);
     state.presetId = id;
     document.documentElement.style.setProperty("--accent", p.color);
     els.emoji.textContent = p.emoji;
@@ -248,19 +337,36 @@
     document.querySelectorAll(".preset").forEach(b =>
       b.classList.toggle("active", b.dataset.id === id));
 
-    // Timer only for "away" statuses, and only when a minute count is given
-    const mins = parseInt(els.minutes.value, 10);
-    if (startTimer && id !== "available" && mins > 0) {
-      state.endTime = Date.now() + mins * 60 * 1000;
-    } else {
-      state.endTime = null;
+    syncInputs(p);
+
+    // Only (re)start the timer on an explicit status change; restoring keeps it.
+    if (startTimer) {
+      if (p.kind === "timer") {
+        const mins = state.timers[id] || DEFAULT_TIMERS[id] || 30;
+        state.endTime = Date.now() + mins * 60 * 1000;
+      } else {
+        state.endTime = null;
+      }
     }
     save();
     render();
   }
 
+  // Show the right contextual control (minutes vs. return-time) for a status.
+  function syncInputs(p) {
+    els.minutesWrap.hidden = p.kind !== "timer";
+    els.returnWrap.hidden = p.kind !== "return";
+    if (p.kind === "timer") els.minutes.value = state.timers[p.id] ?? DEFAULT_TIMERS[p.id];
+    if (p.kind === "return") els.returnAt.value = state.eodReturn;
+  }
+
   function render() {
-    if (state.endTime) {
+    const p = getPreset(state.presetId);
+    if (p.kind === "return") {
+      els.countdown.hidden = true;
+      els.returnTime.hidden = false;
+      els.returnTime.textContent = "Back tomorrow at " + fmtTime(state.eodReturn);
+    } else if (state.endTime) {
       els.countdown.hidden = false;
       els.returnTime.hidden = false;
       const back = new Date(state.endTime);
@@ -271,6 +377,13 @@
       els.returnTime.hidden = true;
     }
     updateCountdown();
+  }
+
+  function fmtTime(hhmm) {
+    const [h, m] = (hhmm || "17:30").split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
   function updateCountdown() {
@@ -298,6 +411,23 @@
     render();
   }
 
+  // ---- Contextual input editing (per-status persistence) ----
+  els.minutes.addEventListener("input", () => {
+    const id = state.presetId;
+    const v = parseInt(els.minutes.value, 10);
+    if (v > 0) {
+      state.timers[id] = v;
+      state.endTime = Date.now() + v * 60 * 1000; // restart with the new length
+      save();
+      render();
+    }
+  });
+  els.returnAt.addEventListener("input", () => {
+    state.eodReturn = els.returnAt.value || "17:30";
+    save();
+    render();
+  });
+
   // ---- Persistence ----
   function save() {
     localStorage.setItem("statusBoard", JSON.stringify(state));
@@ -306,17 +436,64 @@
     try {
       const raw = JSON.parse(localStorage.getItem("statusBoard"));
       if (raw && raw.presetId) {
-        state = raw;
+        Object.assign(state, raw);
+        state.timers = Object.assign({}, DEFAULT_TIMERS, raw.timers || {});
+        if (!state.eodReturn) state.eodReturn = "17:30";
         if (state.endTime && state.endTime < Date.now() - 3600000) state.endTime = null;
       }
     } catch (_) {}
   }
 
+  // ---- Lock mode ----
+  function lock() {
+    const pin = prompt("Set an unlock PIN (digits). Leave blank for no PIN:", "");
+    if (pin === null) return; // cancelled
+    lockPin = pin.trim() || null;
+    document.body.classList.remove("screensaver");
+    document.body.classList.add("locked");
+    els.lockbar.hidden = false;
+    els.pinInput.hidden = !lockPin;
+    els.pinInput.value = "";
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    if (lockPin) els.pinInput.focus();
+  }
+  function tryUnlock() {
+    if (lockPin && els.pinInput.value !== lockPin) {
+      els.lockbar.classList.add("shake");
+      setTimeout(() => els.lockbar.classList.remove("shake"), 400);
+      els.pinInput.value = "";
+      return;
+    }
+    document.body.classList.remove("locked");
+    els.lockbar.hidden = true;
+    lockPin = null;
+  }
+  els.lockBtn.addEventListener("click", lock);
+  els.unlockBtn.addEventListener("click", tryUnlock);
+  els.pinInput.addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+
+  // ---- Idle screensaver ----
+  const IDLE_MS = 120000; // 2 minutes
+  let idleTimer = null;
+  function resetIdle() {
+    document.body.classList.remove("screensaver");
+    clearTimeout(idleTimer);
+    if (!document.body.classList.contains("locked")) {
+      idleTimer = setTimeout(() => {
+        if (!document.body.classList.contains("locked")) document.body.classList.add("screensaver");
+      }, IDLE_MS);
+    }
+  }
+  ["mousemove", "mousedown", "keydown", "touchstart", "wheel"].forEach(ev =>
+    window.addEventListener(ev, resetIdle, { passive: true }));
+
   // ---- Keyboard shortcuts ----
   document.addEventListener("keydown", e => {
+    if (document.body.classList.contains("locked")) return; // unlock only via the lock bar
     if (e.target.tagName === "INPUT") return;
     const k = e.key.toLowerCase();
     if (k === "f") document.body.classList.toggle("focus");
+    else if (k === "l") lock();
     else if (k === "escape") clearTimer();
     else {
       const idx = parseInt(e.key, 10);
@@ -324,6 +501,7 @@
     }
   });
 
+  els.lockBtn.title = "Lock display (L)";
   document.getElementById("fullscreenBtn").addEventListener("click", () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
@@ -334,6 +512,7 @@
   setStatus(state.presetId, false);
   render();
   updateClock();
+  resetIdle();
   tick = setInterval(() => { updateCountdown(); updateClock(); }, 1000);
 
   // ---- PWA: register service worker for offline / installable use ----
