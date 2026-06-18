@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Status Board</title>
+<style>
+  :root {
+    --accent: #38bdf8;
+    --bg-1: #0f172a;
+    --bg-2: #1e293b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 30% 20%, var(--bg-2), var(--bg-1) 70%);
+    color: #f8fafc;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: background 0.8s ease;
+  }
+
+  /* ---- Main status stage ---- */
+  .stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    gap: 1.5rem;
+    position: relative;
+  }
+
+  .emoji {
+    font-size: clamp(4rem, 14vh, 10rem);
+    line-height: 1;
+    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.4));
+    animation: float 4s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+
+  .status-label {
+    font-size: clamp(2.5rem, 11vw, 9rem);
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 40px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+
+  .sub {
+    font-size: clamp(1rem, 3.5vw, 2rem);
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .countdown {
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(2rem, 8vw, 5.5rem);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .countdown.overdue { color: #f87171; animation: pulse 1.2s ease-in-out infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  .return-time { color: #cbd5e1; font-size: clamp(1rem, 3vw, 1.6rem); }
+
+  .clock {
+    position: absolute;
+    top: 1.5rem;
+    right: 2rem;
+    font-size: clamp(1rem, 2.5vw, 1.6rem);
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  /* ---- Control bar ---- */
+  .controls {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(148, 163, 184, 0.15);
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  body.focus .controls { opacity: 0; transform: translateY(100%); pointer-events: none; }
+  body.focus:hover .controls { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+  .preset {
+    border: none;
+    border-radius: 999px;
+    padding: 0.6rem 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    background: rgba(148, 163, 184, 0.15);
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .preset:hover { transform: translateY(-2px); background: rgba(148, 163, 184, 0.28); }
+  .preset.active { box-shadow: 0 0 0 2px var(--accent), 0 6px 18px rgba(0,0,0,0.35); background: rgba(56, 189, 248, 0.18); }
+
+  .divider { width: 1px; height: 28px; background: rgba(148, 163, 184, 0.25); }
+
+  .timer-input {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+  }
+
+  .timer-input input {
+    width: 4rem;
+    padding: 0.45rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: #f8fafc;
+    font-size: 0.95rem;
+    text-align: center;
+  }
+
+  .icon-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    background: rgba(148, 163, 184, 0.15);
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .icon-btn:hover { background: rgba(148, 163, 184, 0.3); }
+
+  .hint {
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.85rem;
+    color: #475569;
+  }
+  body.focus .hint { display: none; }
+</style>
+</head>
+<body>
+  <main class="stage">
+    <div class="clock" id="clock">--:--</div>
+    <div class="emoji" id="emoji">🟢</div>
+    <div class="status-label" id="label">Available</div>
+    <div class="sub" id="sub">Set your status below</div>
+    <div class="countdown" id="countdown" hidden></div>
+    <div class="return-time" id="returnTime" hidden></div>
+    <div class="hint">Tip: press <b>F</b> for focus mode · <b>Esc</b> to clear timer</div>
+  </main>
+
+  <nav class="controls" id="controls">
+    <!-- preset buttons injected here -->
+    <span class="divider"></span>
+    <label class="timer-input">
+      <input id="minutes" type="number" min="1" max="240" value="30" />
+      min timer
+    </label>
+    <button class="icon-btn" id="fullscreenBtn" title="Toggle fullscreen">⛶ Fullscreen</button>
+  </nav>
+
+<script>
+  const PRESETS = [
+    { id: "available", label: "Available",   emoji: "🟢", sub: "At my desk",          color: "#22c55e" },
+    { id: "lunch",     label: "On Lunch",    emoji: "🍔", sub: "Stepped out to eat",  color: "#fbbf24" },
+    { id: "break",     label: "On Break",    emoji: "☕", sub: "Taking a short break", color: "#38bdf8" },
+    { id: "meeting",   label: "In a Meeting",emoji: "📅", sub: "Please do not disturb",color: "#a78bfa" },
+    { id: "brb",       label: "Be Right Back",emoji: "🚶", sub: "Back in a moment",    color: "#fb923c" },
+    { id: "focus",     label: "Focus Time",  emoji: "🎧", sub: "Heads-down, will reply soon", color: "#f472b6" },
+    { id: "eod",       label: "Done for Day",emoji: "🌙", sub: "Out until tomorrow",   color: "#94a3b8" },
+  ];
+
+  const els = {
+    emoji: document.getElementById("emoji"),
+    label: document.getElementById("label"),
+    sub: document.getElementById("sub"),
+    countdown: document.getElementById("countdown"),
+    returnTime: document.getElementById("returnTime"),
+    controls: document.getElementById("controls"),
+    clock: document.getElementById("clock"),
+    minutes: document.getElementById("minutes"),
+  };
+
+  let state = { presetId: "available", endTime: null };
+  let tick = null;
+
+  // ---- Build preset buttons ----
+  const divider = els.controls.querySelector(".divider");
+  PRESETS.forEach(p => {
+    const b = document.createElement("button");
+    b.className = "preset";
+    b.dataset.id = p.id;
+    b.innerHTML = `<span>${p.emoji}</span> ${p.label}`;
+    b.addEventListener("click", () => setStatus(p.id, true));
+    els.controls.insertBefore(b, divider);
+  });
+
+  function setStatus(id, startTimer) {
+    const p = PRESETS.find(x => x.id === id) || PRESETS[0];
+    state.presetId = id;
+    document.documentElement.style.setProperty("--accent", p.color);
+    els.emoji.textContent = p.emoji;
+    els.label.textContent = p.label;
+    els.sub.textContent = p.sub;
+
+    document.querySelectorAll(".preset").forEach(b =>
+      b.classList.toggle("active", b.dataset.id === id));
+
+    // Timer only for "away" statuses, and only when a minute count is given
+    const mins = parseInt(els.minutes.value, 10);
+    if (startTimer && id !== "available" && mins > 0) {
+      state.endTime = Date.now() + mins * 60 * 1000;
+    } else {
+      state.endTime = null;
+    }
+    save();
+    render();
+  }
+
+  function render() {
+    if (state.endTime) {
+      els.countdown.hidden = false;
+      els.returnTime.hidden = false;
+      const back = new Date(state.endTime);
+      els.returnTime.textContent = "Back at " +
+        back.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } else {
+      els.countdown.hidden = true;
+      els.returnTime.hidden = true;
+    }
+    updateCountdown();
+  }
+
+  function updateCountdown() {
+    if (!state.endTime) return;
+    const diff = state.endTime - Date.now();
+    const over = diff < 0;
+    const total = Math.floor(Math.abs(diff) / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = n => String(n).padStart(2, "0");
+    const time = (h > 0 ? h + ":" : "") + pad(m) + ":" + pad(s);
+    els.countdown.textContent = over ? "+" + time : time;
+    els.countdown.classList.toggle("overdue", over);
+    if (over) els.sub.textContent = "Running over — back soon";
+  }
+
+  function updateClock() {
+    els.clock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function clearTimer() {
+    state.endTime = null;
+    save();
+    render();
+  }
+
+  // ---- Persistence ----
+  function save() {
+    localStorage.setItem("statusBoard", JSON.stringify(state));
+  }
+  function load() {
+    try {
+      const raw = JSON.parse(localStorage.getItem("statusBoard"));
+      if (raw && raw.presetId) {
+        state = raw;
+        if (state.endTime && state.endTime < Date.now() - 3600000) state.endTime = null;
+      }
+    } catch (_) {}
+  }
+
+  // ---- Keyboard shortcuts ----
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT") return;
+    const k = e.key.toLowerCase();
+    if (k === "f") document.body.classList.toggle("focus");
+    else if (k === "escape") clearTimer();
+    else {
+      const idx = parseInt(e.key, 10);
+      if (idx >= 1 && idx <= PRESETS.length) setStatus(PRESETS[idx - 1].id, true);
+    }
+  });
+
+  document.getElementById("fullscreenBtn").addEventListener("click", () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  });
+
+  // ---- Init ----
+  load();
+  setStatus(state.presetId, false);
+  render();
+  updateClock();
+  tick = setInterval(() => { updateCountdown(); updateClock(); }, 1000);
+</script>
+</body>
+</html>
