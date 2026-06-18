@@ -22,6 +22,15 @@ Tip: put it fullscreen (⛶ button) on a second monitor for maximum glance-abili
   Back, Focus Time, Done for Day.
 - **Remembers your status** across refreshes (via `localStorage`).
 - **Focus mode** hides the controls for a clean display.
+- **Installable PWA** — works offline and can be installed as an app (look for the
+  install icon in your browser's address bar, then launch it in its own window).
+
+## Installing as an app (PWA)
+
+The install/offline features require the page to be served over **HTTPS** (or
+`localhost`) — opening the file directly with `file://` won't register the
+service worker. The easiest route is to enable **GitHub Pages** for this repo,
+then visit the Pages URL and click **Install** in the address bar.
 
 ## Keyboard shortcuts
 
