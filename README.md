@@ -16,10 +16,20 @@ Tip: put it fullscreen (⛶ button) on a second monitor for maximum glance-abili
 
 - **Big, glanceable status** — emoji + label readable across the room, with the
   whole board tinted to match the status color.
-- **Return timer** — set a number of minutes and the board counts down and shows
-  your "back at" time. It keeps counting (in red) if you run over.
+- **Per-status timers with sensible defaults** — each status remembers its own
+  countdown length (Lunch 60 min, Break 15 min, Meeting/Be Right Back/Focus
+  30 min). Edit the value while a status is active and it's saved for next time.
+  The board counts down, shows your "back at" time, and keeps counting in red if
+  you run over.
+- **Done for the Day** uses a customizable **return time** instead of a countdown
+  ("Back tomorrow at 8:00 AM").
 - **One-tap presets** — Available, On Lunch, On Break, In a Meeting, Be Right
   Back, Focus Time, Done for Day.
+- **Idle screensaver** — after 2 minutes of no input the board dims and slowly
+  drifts around the screen (prevents burn-in); any input wakes it.
+- **Lock mode** — the 🔒 button (or `L`) locks the display fullscreen with an
+  optional PIN, so a passer-by can't change your status. Note: this is an
+  in-page lock, not an OS screen lock.
 - **Remembers your status** across refreshes (via `localStorage`).
 - **Focus mode** hides the controls for a clean display.
 - **Installable PWA** — works offline and can be installed as an app (look for the
@@ -38,4 +48,5 @@ then visit the Pages URL and click **Install** in the address bar.
 |-----------|-----------------------------------------|
 | `1`–`7`   | Jump to the matching status preset      |
 | `F`       | Toggle focus mode (hide the controls)   |
+| `L`       | Lock the display (optional PIN)         |
 | `Esc`     | Clear the active timer                  |
