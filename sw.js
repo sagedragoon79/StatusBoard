@@ -1,5 +1,5 @@
 // Simple offline-first service worker for Status Board.
-const CACHE = "status-board-v4";
+const CACHE = "status-board-v5";
 const ASSETS = [
   "./",
   "./index.html",
