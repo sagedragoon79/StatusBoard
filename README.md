@@ -25,6 +25,11 @@ Tip: put it fullscreen (⛶ button) on a second monitor for maximum glance-abili
   ("Back tomorrow at 8:00 AM").
 - **One-tap presets** — Available, On Lunch, On Break, In a Meeting, Be Right
   Back, Focus Time, Done for Day.
+- **Alarm when time's up** — pick from a handful of built-in sounds (Chime, Beep,
+  Ascending, Marimba, Alert, or Off). When a timer runs out the board flashes a
+  colored edge glow and bounces for attention; click anywhere (or press a key) to
+  dismiss. Sounds are synthesized in-browser, so there are no audio files to load
+  and it still works offline.
 - **Fullscreen** — one button enters and exits fullscreen (no need to know the
   F11 shortcut).
 - **Remembers your status** across refreshes (via `localStorage`).

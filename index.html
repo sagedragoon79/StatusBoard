@@ -182,9 +182,42 @@
   body.focus .hint { display: none; }
 
   .timer-input[hidden] { display: none; }
+
+  .select {
+    padding: 0.45rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+    color: #f8fafc;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+
+  /* ---- Alarm attention (when a timer runs out) ---- */
+  .flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 50;
+  }
+  body.alarm .flash { animation: flash 0.9s ease-in-out infinite; }
+  @keyframes flash {
+    0%, 100% { box-shadow: inset 0 0 0 0 transparent; opacity: 0; }
+    50% { box-shadow: inset 0 0 60px 22px var(--accent); opacity: 1; }
+  }
+  body.alarm .stage { animation: attn 0.9s ease infinite; }
+  @keyframes attn {
+    0%, 100% { transform: translateY(0); }
+    12% { transform: translateY(-26px); }
+    24% { transform: translateY(0); }
+    36% { transform: translateY(-14px); }
+    48% { transform: translateY(0); }
+  }
 </style>
 </head>
 <body>
+  <div class="flash" id="flash"></div>
   <main class="stage">
     <div class="clock" id="clock">--:--</div>
     <div class="emoji" id="emoji">🟢</div>
@@ -203,6 +236,17 @@
     </label>
     <label class="timer-input" id="returnWrap" hidden>
       back at <input id="returnAt" type="time" value="17:30" />
+    </label>
+    <label class="timer-input" id="soundWrap">
+      🔔
+      <select id="soundSel" class="select">
+        <option value="off">Off</option>
+        <option value="chime">Chime</option>
+        <option value="beep">Beep</option>
+        <option value="ascending">Ascending</option>
+        <option value="marimba">Marimba</option>
+        <option value="alert">Alert</option>
+      </select>
     </label>
     <span class="divider"></span>
     <button class="icon-btn" id="fullscreenBtn" title="Toggle fullscreen">⛶ Fullscreen</button>
@@ -235,6 +279,8 @@
     minutesWrap: document.getElementById("minutesWrap"),
     returnAt: document.getElementById("returnAt"),
     returnWrap: document.getElementById("returnWrap"),
+    soundSel: document.getElementById("soundSel"),
+    flash: document.getElementById("flash"),
   };
 
   let state = {
@@ -242,8 +288,10 @@
     endTime: null,
     timers: { ...DEFAULT_TIMERS },
     eodReturn: "17:30",
+    sound: "chime",
   };
   let tick = null;
+  let armed = false;   // true while a running timer is still counting down
 
   const getPreset = id => PRESETS.find(x => x.id === id) || PRESETS[0];
 
@@ -270,14 +318,18 @@
       b.classList.toggle("active", b.dataset.id === id));
 
     syncInputs(p);
+    stopAlarm();
 
     // Only (re)start the timer on an explicit status change; restoring keeps it.
     if (startTimer) {
       if (p.kind === "timer") {
         const mins = state.timers[id] || DEFAULT_TIMERS[id] || 30;
         state.endTime = Date.now() + mins * 60 * 1000;
+        armed = true;
+        warmAudio();
       } else {
         state.endTime = null;
+        armed = false;
       }
     }
     save();
@@ -330,7 +382,10 @@
     const time = (h > 0 ? h + ":" : "") + pad(m) + ":" + pad(s);
     els.countdown.textContent = over ? "+" + time : time;
     els.countdown.classList.toggle("overdue", over);
-    if (over) els.sub.textContent = "Running over — back soon";
+    if (over && armed) { armed = false; startAlarm(); }
+    else if (over && !document.body.classList.contains("alarm")) {
+      els.sub.textContent = "Running over — back soon";
+    }
   }
 
   function updateClock() {
@@ -339,9 +394,73 @@
 
   function clearTimer() {
     state.endTime = null;
+    armed = false;
+    stopAlarm();
     save();
     render();
   }
+
+  // ---- Alarm: synthesized sounds + visual attention grab ----
+  let audioCtx = null;
+  function warmAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (_) {}
+    return audioCtx;
+  }
+  function tone(c, freq, start, dur, type, peak) {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type || "sine";
+    o.frequency.value = freq;
+    o.connect(g); g.connect(c.destination);
+    const t0 = c.currentTime + start;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak ?? 0.3, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+  }
+  const SOUNDS = {
+    off: () => {},
+    chime: c => [880, 1108.73, 1318.51].forEach((f, i) => tone(c, f, i * 0.18, 0.55, "sine", 0.3)),
+    beep: c => [0, 0.3].forEach(s => tone(c, 880, s, 0.18, "square", 0.22)),
+    ascending: c => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(c, f, i * 0.12, 0.3, "triangle", 0.28)),
+    marimba: c => [659.25, 830.61, 987.77, 1318.51].forEach((f, i) => tone(c, f, i * 0.1, 0.45, "triangle", 0.3)),
+    alert: c => [0, 0.22, 0.44].forEach(s => { tone(c, 1046.5, s, 0.12, "square", 0.22); tone(c, 1318.51, s + 0.06, 0.12, "square", 0.18); }),
+  };
+  function playSound(id) {
+    if (id === "off") return;
+    const c = warmAudio();
+    if (c) try { (SOUNDS[id] || SOUNDS.chime)(c); } catch (_) {}
+  }
+
+  let alarmTimer = null, alarmCount = 0;
+  function startAlarm() {
+    if (document.body.classList.contains("alarm")) return;
+    document.body.classList.add("alarm");
+    els.sub.textContent = "Time's up — click anywhere to dismiss";
+    alarmCount = 0;
+    const ring = () => {
+      playSound(state.sound);
+      if (++alarmCount < 8) alarmTimer = setTimeout(ring, 3500); // ~28s of nudging
+    };
+    ring();
+  }
+  function stopAlarm() {
+    document.body.classList.remove("alarm");
+    clearTimeout(alarmTimer);
+    alarmTimer = null;
+  }
+  function acknowledge() {
+    if (document.body.classList.contains("alarm")) { stopAlarm(); render(); }
+  }
+  document.addEventListener("pointerdown", acknowledge);
+  els.soundSel.addEventListener("change", () => {
+    state.sound = els.soundSel.value;
+    save();
+    playSound(state.sound); // preview the choice
+  });
 
   // ---- Contextual input editing (per-status persistence) ----
   els.minutes.addEventListener("input", () => {
@@ -350,6 +469,8 @@
     if (v > 0) {
       state.timers[id] = v;
       state.endTime = Date.now() + v * 60 * 1000; // restart with the new length
+      armed = true;
+      stopAlarm();
       save();
       render();
     }
@@ -371,6 +492,7 @@
         Object.assign(state, raw);
         state.timers = Object.assign({}, DEFAULT_TIMERS, raw.timers || {});
         if (!state.eodReturn) state.eodReturn = "17:30";
+        if (!state.sound) state.sound = "chime";
         if (state.endTime && state.endTime < Date.now() - 3600000) state.endTime = null;
       }
     } catch (_) {}
@@ -379,6 +501,7 @@
   // ---- Keyboard shortcuts ----
   document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT") return;
+    acknowledge(); // any shortcut key also dismisses a sounding alarm
     const k = e.key.toLowerCase();
     if (k === "f") document.body.classList.toggle("focus");
     else if (k === "escape") clearTimer();
@@ -401,6 +524,7 @@
 
   // ---- Init ----
   load();
+  els.soundSel.value = state.sound;
   setStatus(state.presetId, false);
   render();
   updateClock();
